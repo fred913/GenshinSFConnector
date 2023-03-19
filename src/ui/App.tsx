@@ -81,8 +81,8 @@ class App extends React.Component<Readonly<unknown>, IState> {
         style={
           this.state.bgFile
             ? {
-                background: `url("${this.state.bgFile}") fixed`,
-              }
+              background: `url("${this.state.bgFile}") fixed`,
+            }
             : {}
         }
       >
