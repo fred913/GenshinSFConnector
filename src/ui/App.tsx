@@ -14,7 +14,7 @@ interface IState {
 }
 
 const downloadHandler = new DownloadHandler()
-const DEFAULT_BG = 'https://api.grasscutter.io/cultivation/bgfile'
+const DEFAULT_BG = 'http://cdn.hz.ft2.club:8031/https://api.grasscutter.io/cultivation/bgfile.png'
 
 class App extends React.Component<Readonly<unknown>, IState> {
   constructor(props: Readonly<unknown>) {
