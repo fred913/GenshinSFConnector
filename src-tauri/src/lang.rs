@@ -9,7 +9,7 @@ pub async fn get_lang(window: tauri::Window, lang: String) -> String {
   let lang_path: PathBuf = [&install_location(), "lang", &format!("{}.json", lang)]
     .iter()
     .collect();
-  match std::fs::read_to_string(&lang_path) {
+  match std::fs::read_to_string(lang_path) {
     Ok(x) => x,
     Err(e) => {
       emit_lang_err(window, format!("Failed to read language file: {}", e));
@@ -28,7 +28,12 @@ pub async fn get_languages() -> std::collections::HashMap<String, String> {
   for entry in lang_files {
     let entry = entry.unwrap();
     let path = entry.path();
-    let filename = path.file_name().unwrap().to_str().unwrap();
+    let filename = path
+      .file_name()
+      .unwrap_or_else(|| panic!("Failed to get filename from path: {:?}", path))
+      .to_str()
+      .unwrap_or_else(|| panic!("Failed to convert filename to string: {:?}", path))
+      .to_string();
 
     let content = match std::fs::read_to_string(&path) {
       Ok(x) => x,

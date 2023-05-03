@@ -9,6 +9,7 @@ A game launcher designed to easily proxy traffic from anime game to private serv
 - [Client Patching Notice](#client-patching-notice)
 - [Download](#download)
 - [Setup](#setup)
+- [Troubleshooting](#troubleshooting)
 - [Developer Quick-start](#developer-quickstart)
   - [Setup](#setup)
   - [Building](#building)
@@ -18,9 +19,9 @@ A game launcher designed to easily proxy traffic from anime game to private serv
 - [Screenshots](#screenshots)
 - [Credits](#credits)
 
-# Client Patching Notice
+# Client Patching Notice - RSA
 
-For game versions 2.8 and above, Cultivation automatically makes a small patch to your game client when launching using Grasscutter, and restores it upon closing the game. In theory, you should still be totally safe, however it would be dishonest to not explicitly state that **modifying the game client could, theoretically, lead to a ban if you connect to official servers with it**. It is extremely unlikely AND there are no instances known of it happening, but the possibility exists.
+For game versions 3.1 and above, Cultivation automatically makes a small patch to your game client when launching using Grasscutter, and restores it upon closing the game. In theory, you should still be totally safe, however it would be dishonest to not explicitly state that **modifying the game client could, theoretically, lead to a ban if you connect to official servers with it**. It is extremely unlikely AND there are no instances known of it happening, but the possibility exists.
 
 # Download
 
@@ -37,7 +38,7 @@ Download and open the MSI, and once installed, run Cultivation as administrator.
 - Download Cultivation
   - If you are on Windows 10 or 11, use the MSI
   - If you are on Windows 7, or the MSI doesn't work, use the zip and download [WebView](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)
-  - If you are on Linux or MacOS, [help us port Windows-specific system calls to Linux/MacOS!](https://github.com/Grasscutters/Cultivation/issues/7)
+  - If you are on GNU/Linux or MacOS, [help us port Windows-specific system calls to GNU/Linux and MacOS!](https://github.com/Grasscutters/Cultivation/issues/7)
 - Install or extract Cultivation
 - Open Cultivation **_as administrator_**
 - Before clicking randomly on stuff, in options (top right cog icon), set your Game Install Path.
@@ -47,9 +48,8 @@ Download and open the MSI, and once installed, run Cultivation as administrator.
   - If joining a public one, you're done. Just click "Connect with Grasscutter" and input the address and port. You do not have to continue these instructions.
     - If you are getting System Error, or 4214, ask the [Discord support channels](https://discord.gg/grasscutter)
 - Open the "Downloads" menu (top right)
-  - Download "latest grasscutter" (second from the top)
-  - Download "resources" (very bottom)
-- Once all of that is done, click the icon next to "Launch"
+  - Download "Grasscutter All-in-One" (top of the list)
+- Once that is done, click the icon next to "Launch"
 - To play on your new server:
   - Click "Connect with Grasscutter"
   - Input `localhost` as the address, and `443` as the port
@@ -57,6 +57,19 @@ Download and open the MSI, and once installed, run Cultivation as administrator.
 - Any generic "I am getting XYZ error!" should go in the [Discord support channels](https://discord.gg/grasscutter)
 - Any specific Cultivation issues should go in [the issues section](/issues)
 - Any Grasscutter server related issues should go in [the Grasscutter issues section](https://github.com/Grasscutters/Grasscutter)
+
+# Troubleshooting
+
+### White screen, insta-crash or something similar
+
+- First try [running in Windows 8 compatibility mode](https://www.lifewire.com/run-older-programs-with-windows-10-compatibility-mode-4587064).
+- If that doesn't work, fully uninstall and reinstall [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/#download-section).
+  - If you are having trouble uninstalling it, try deleting this registry folder and uninstalling again `Computer\HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}`
+  - You can also try [uninstalling from the Command Prompt](https://superuser.com/a/1743626)
+
+### Internet not working after use
+
+Please allow the Cultivation window to pop back up once you have quit out of the game. This tells you that it knows you closed the game, and that it has reverted your proxy settings. If you have closed Cultivation before this happens, or have had some other issue with your internet, go to your [proxy settings in Windows](https://techviral.net/check-proxy-server-settings-in-windows/) and disable the "Manual proxy setup".
 
 # Developer Quickstart
 
@@ -66,7 +79,7 @@ Download and open the MSI, and once installed, run Cultivation as administrator.
 - Install [yarn](https://classic.yarnpkg.com/lang/en/docs/install) (cry about it `npm` lovers)
 - Install [Rust](https://www.rust-lang.org/tools/install)
 - `yarn install`
-- `yarn start:dev`
+- `yarn tauri dev`
 
 ### Building
 
@@ -102,11 +115,10 @@ A full theming reference can be found [here!](/THEMES.md)
 
 # Screenshots
 
-![image](https://user-images.githubusercontent.com/25207995/173211603-e5e85df7-7fd3-430b-9246-749ebbc1e483.png)
-![image](https://user-images.githubusercontent.com/25207995/173211543-b7e88943-cfd2-418b-ac48-7f856868129b.png)
-![image](https://user-images.githubusercontent.com/25207995/173211561-a1778fdc-5cfe-4687-9a00-44500d29e470.png)
-![image](https://user-images.githubusercontent.com/25207995/173211573-8cedfa9a-51c9-4670-a4f7-a334a2fabec5.png)
-![image](https://user-images.githubusercontent.com/25207995/173211590-6a2242b5-1e8f-4db9-a5c7-06284688b131.png)
+![image](https://user-images.githubusercontent.com/107363768/221495236-ca1e2f2e-0f85-4765-a5f3-8bdcea299612.png)
+![image](https://user-images.githubusercontent.com/107363768/221495246-ea309640-f866-4f50-bda8-f9d916380f92.png)
+![image](https://user-images.githubusercontent.com/107363768/221495249-5a1aac39-9e8a-4244-9642-72c2e7be8a69.png)
+![image](https://user-images.githubusercontent.com/107363768/221495254-ffbfc24e-ef5d-4e72-9068-a02132381dcc.png)
 
 ## Credits
 

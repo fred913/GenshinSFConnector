@@ -5,7 +5,7 @@ let configFilePath: string
 let defaultConfig: Configuration
 ;(async () => {
   defaultConfig = {
-    toggle_grasscutter: false,
+    toggle_grasscutter: true,
     game_install_path: 'C:\\Program Files\\Genshin Impact\\Genshin Impact game\\GenshinImpact.exe',
     grasscutter_with_game: false,
     grasscutter_path: '',
@@ -15,15 +15,17 @@ let defaultConfig: Configuration
     last_ip: 'localhost',
     last_port: '443',
     language: 'en',
-    customBackground: '',
+    custom_background: '',
     cert_generated: false,
     theme: 'default',
     https_enabled: false,
     debug_enabled: false,
-    patch_metadata: true,
+    patch_rsa: true,
     use_internal_proxy: true,
     wipe_login: false,
     horny_mode: false,
+    auto_mongodb: false,
+    un_elevated: false,
   }
 })()
 
@@ -41,16 +43,18 @@ export interface Configuration {
   last_ip: string
   last_port: string
   language: string
-  customBackground: string
+  custom_background: string
   cert_generated: boolean
   theme: string
   https_enabled: boolean
   debug_enabled: boolean
-  patch_metadata: boolean
+  patch_rsa: boolean
   use_internal_proxy: boolean
   wipe_login: boolean
   horny_mode: boolean
   swag_mode?: boolean
+  auto_mongodb: boolean
+  un_elevated: boolean
 
   // Swag stuff
   akebi_path?: string

@@ -8,6 +8,9 @@ import { convertFileSrc, invoke } from '@tauri-apps/api/tauri'
 import { Main } from './Main'
 import { Mods } from './Mods'
 
+// From https://www.pixiv.net/en/artworks/93995273
+import FALLBACK_BG from '../resources/icons/FALLBACK_BG.jpg'
+
 interface IState {
   page: string
   bgFile: string
@@ -35,7 +38,7 @@ class App extends React.Component<Readonly<unknown>, IState> {
     }
 
     // Get custom bg AFTER theme is loaded !! important !!
-    const custom_bg = await getConfigOption('customBackground')
+    const custom_bg = await getConfigOption('custom_background')
 
     if (custom_bg) {
       const isUrl = /^http(s)?:\/\//gm.test(custom_bg)
@@ -64,6 +67,18 @@ class App extends React.Component<Readonly<unknown>, IState> {
           this.forceUpdate
         )
       }
+    } else {
+      // Check if api bg is accessible
+      const isDefaultValid = await invoke('valid_url', {
+        url: DEFAULT_BG,
+      })
+
+      this.setState(
+        {
+          bgFile: isDefaultValid ? DEFAULT_BG : FALLBACK_BG,
+        },
+        this.forceUpdate
+      )
     }
 
     window.addEventListener('changePage', (e) => {

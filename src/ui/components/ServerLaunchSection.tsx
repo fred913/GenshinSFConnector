@@ -12,8 +12,9 @@ import Plus from '../../resources/icons/plus.svg'
 
 import './ServerLaunchSection.css'
 import { dataDir } from '@tauri-apps/api/path'
-import { getGameExecutable, getGameVersion } from '../../utils/game'
-import { patchGame, unpatchGame } from '../../utils/metadata'
+import { getGameExecutable, getGameVersion, getGrasscutterJar } from '../../utils/game'
+import { patchGame, unpatchGame } from '../../utils/rsa'
+import { listen } from '@tauri-apps/api/event'
 
 interface IProps {
   openExtras: (playGame: () => void) => void
@@ -25,6 +26,7 @@ interface IState {
   checkboxLabel: string
   ip: string
   port: string
+  launchServer: (proc_name?: string) => void
 
   ipPlaceholder: string
   portPlaceholder: string
@@ -37,6 +39,8 @@ interface IState {
   swag: boolean
   akebiSet: boolean
   migotoSet: boolean
+
+  unElevated: boolean
 }
 
 export default class ServerLaunchSection extends React.Component<IProps, IState> {
@@ -54,9 +58,13 @@ export default class ServerLaunchSection extends React.Component<IProps, IState>
       portHelpText: '',
       httpsLabel: '',
       httpsEnabled: false,
+      launchServer: () => {
+        alert('Error launching grasscutter')
+      },
       swag: false,
       akebiSet: false,
       migotoSet: false,
+      unElevated: false,
     }
 
     this.toggleGrasscutter = this.toggleGrasscutter.bind(this)
@@ -64,6 +72,11 @@ export default class ServerLaunchSection extends React.Component<IProps, IState>
     this.setIp = this.setIp.bind(this)
     this.setPort = this.setPort.bind(this)
     this.toggleHttps = this.toggleHttps.bind(this)
+    this.launchServer = this.launchServer.bind(this)
+
+    listen('start_grasscutter', async () => {
+      this.launchServer()
+    })
   }
 
   async componentDidMount() {
@@ -83,6 +96,7 @@ export default class ServerLaunchSection extends React.Component<IProps, IState>
       swag: config.swag_mode || false,
       akebiSet: config.akebi_path !== '',
       migotoSet: config.migoto_path !== '',
+      unElevated: config.un_elevated || false,
     })
   }
 
@@ -109,7 +123,7 @@ export default class ServerLaunchSection extends React.Component<IProps, IState>
 
     // Connect to proxy
     if (config.toggle_grasscutter) {
-      if (config.patch_metadata) {
+      if (config.patch_rsa) {
         const gameVersion = await getGameVersion()
         console.log(gameVersion)
 
@@ -120,24 +134,20 @@ export default class ServerLaunchSection extends React.Component<IProps, IState>
           return
         }
 
-        if (gameVersion?.major == 2 && gameVersion?.minor < 8) {
-          alert(
-            'Game version is too old for metadata patching. Please disable metadata patching in the settings and try again.'
-          )
+        if (gameVersion?.major == 2 && gameVersion?.minor < 9) {
+          alert('Game version is too old for RSA patching. Please disable RSA patching in the settings and try again.')
           return
         }
 
-        if (gameVersion?.major == 3 && gameVersion?.minor >= 1) {
-          alert(
-            'Game version is too new for metadata patching. Please disable metadata patching in the settings to launch the game.\nNOTE: You will require a UA patch to play the game.'
-          )
+        if (gameVersion?.major == 3 && gameVersion?.minor < 1) {
+          alert('Game version is too old for RSA patching. Please disable RSA patching in the settings and try again.')
           return
         }
 
         const patched = await patchGame()
 
         if (!patched) {
-          alert('Could not patch game!')
+          alert('Could not patch! Try launching again, or patching manually.')
           return
         }
       }
@@ -163,26 +173,10 @@ export default class ServerLaunchSection extends React.Component<IProps, IState>
 
       // Open server as well if the options are set
       if (config.grasscutter_with_game) {
-        const jarFolderArr = config.grasscutter_path.replace(/\\/g, '/').split('/')
-        jarFolderArr.pop()
-
-        const jarFolder = jarFolderArr.join('/')
-
-        await invoke('run_jar', {
-          path: config.grasscutter_path,
-          executeIn: jarFolder,
-          javaPath: config.java_path || '',
-        })
+        this.launchServer()
       }
     } else {
-      const unpatched = await unpatchGame()
-
-      if (!unpatched) {
-        alert(
-          `Could not unpatch game, aborting launch! (You can find your metadata backup in ${await dataDir()}\\cultivation\\)`
-        )
-        return
-      }
+      await unpatchGame()
     }
 
     if (config.wipe_login) {
@@ -198,14 +192,34 @@ export default class ServerLaunchSection extends React.Component<IProps, IState>
       path: exe || config.game_install_path,
     })
 
-    if (gameExists) await invoke('run_program_relative', { path: exe || config.game_install_path })
+    if (gameExists)
+      if (config.un_elevated) {
+        await invoke('run_un_elevated', {
+          path: config.game_install_path,
+        })
+      } else {
+        await invoke('run_program_relative', { path: exe || config.game_install_path })
+      }
     else alert('Game not found! At: ' + (exe || config.game_install_path))
   }
 
-  async launchServer() {
+  async launchServer(proc_name?: string) {
+    if (await invoke('is_grasscutter_running')) {
+      alert('Grasscutter already running!')
+      return
+    }
     const config = await getConfig()
 
     if (!config.grasscutter_path) return alert('Grasscutter not installed or set!')
+
+    if (config.auto_mongodb) {
+      const grasscutter_jar = await getGrasscutterJar()
+      await invoke('enable_grasscutter_watcher', {
+        process: proc_name || grasscutter_jar,
+      })
+      // Check if MongoDB is running and start it if not
+      await invoke('service_status', { service: 'MongoDB' })
+    }
 
     let jarFolder = config.grasscutter_path
 

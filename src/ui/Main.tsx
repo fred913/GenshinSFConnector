@@ -11,20 +11,22 @@ import Downloads from './components/menu/Downloads'
 import NewsSection from './components/news/NewsSection'
 import Game from './components/menu/Game'
 import RightBar from './components/RightBar'
+import { ExtrasMenu } from './components/menu/ExtrasMenu'
+import Notification from './components/common/Notification'
 
 import { getConfigOption, setConfigOption } from '../utils/configuration'
 import { invoke } from '@tauri-apps/api'
+import { getVersion } from '@tauri-apps/api/app'
 import { listen } from '@tauri-apps/api/event'
 import { dataDir } from '@tauri-apps/api/path'
 import { appWindow } from '@tauri-apps/api/window'
-import { unpatchGame } from '../utils/metadata'
+import { unpatchGame } from '../utils/rsa'
 import DownloadHandler from '../utils/download'
 
 // Graphics
 import cogBtn from '../resources/icons/cog.svg'
 import downBtn from '../resources/icons/download.svg'
 import wrenchBtn from '../resources/icons/wrench.svg'
-import { ExtrasMenu } from './components/menu/ExtrasMenu'
 
 interface IProps {
   downloadHandler: DownloadHandler
@@ -39,6 +41,7 @@ interface IState {
   extrasOpen: boolean
   migotoSet: boolean
   playGame: (exe?: string, proc_name?: string) => void
+  notification: React.ReactElement | null
 }
 
 export class Main extends React.Component<IProps, IState> {
@@ -55,6 +58,7 @@ export class Main extends React.Component<IProps, IState> {
       playGame: () => {
         alert('Error launching game')
       },
+      notification: null,
     }
 
     listen('lang_error', (payload) => {
@@ -65,18 +69,41 @@ export class Main extends React.Component<IProps, IState> {
       setConfigOption('grasscutter_path', payload)
     })
 
-    // Emitted for metadata replacing-purposes
+    listen('migoto_extracted', ({ payload }: { payload: string }) => {
+      setConfigOption('migoto_path', payload)
+
+      invoke('set_migoto_target', {
+        migotoPath: payload,
+      })
+    })
+
+    // Emitted for rsa replacing-purposes
     listen('game_closed', async () => {
-      const wasPatched = await getConfigOption('patch_metadata')
+      const wasPatched = await getConfigOption('patch_rsa')
 
       if (wasPatched) {
         const unpatched = await unpatchGame()
 
-        if (!unpatched) {
-          alert(
-            `Could not unpatch game! (You should be able to find your metadata backup in ${await dataDir()}\\cultivation\\)`
-          )
+        if (unpatched) {
+          alert(`Could not unpatch game! (Delete version.dll in your game folder)`)
         }
+      }
+    })
+
+    listen('migoto_set', async () => {
+      this.setState({
+        migotoSet: !!(await getConfigOption('migoto_path')),
+      })
+
+      window.location.reload()
+    })
+
+    // Emitted for automatic processes
+    listen('grasscutter_closed', async () => {
+      const autoService = await getConfigOption('auto_mongodb')
+
+      if (autoService) {
+        await invoke('stop_service', { service: 'MongoDB' })
       }
     })
 
@@ -112,6 +139,39 @@ export class Main extends React.Component<IProps, IState> {
       })
 
       await setConfigOption('cert_generated', true)
+    }
+
+    // Ensure old configs are updated to use RSA
+    const updatedConfig = await getConfigOption('patch_rsa')
+    await setConfigOption('patch_rsa', updatedConfig)
+
+    // Get latest version and compare to this version
+    const latestVersion: {
+      tag_name: string
+      link: string
+    } = await invoke('get_latest_release')
+    const tagName = latestVersion?.tag_name.replace(/[^\d.]/g, '')
+
+    // Check if tagName is different than current version
+    if (tagName && tagName !== (await getVersion())) {
+      // Display notification of new release
+      this.setState({
+        notification: (
+          <>
+            Cultivation{' '}
+            <a href="#" onClick={() => invoke('open_in_browser', { url: latestVersion.link })}>
+              {latestVersion?.tag_name}
+            </a>{' '}
+            is now available!
+          </>
+        ),
+      })
+
+      setTimeout(() => {
+        this.setState({
+          notification: null,
+        })
+      }, 6000)
     }
 
     // Period check to only show progress bar when downloading files
@@ -164,6 +224,8 @@ export class Main extends React.Component<IProps, IState> {
             <img src={gameBtn} alt="game" />
           </div> */}
         </TopBar>
+
+        <Notification show={!!this.state.notification}>{this.state.notification}</Notification>
 
         <RightBar />
 

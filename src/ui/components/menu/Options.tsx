@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api'
 import { dataDir } from '@tauri-apps/api/path'
 import DirInput from '../common/DirInput'
 import Menu from './Menu'
-import Tr, { getLanguages, translate } from '../../../utils/language'
+import Tr, { getLanguages } from '../../../utils/language'
 import { setConfigOption, getConfig, getConfigOption, Configuration } from '../../../utils/configuration'
 import Checkbox from '../common/Checkbox'
 import Divider from './Divider'
@@ -13,9 +13,10 @@ import * as server from '../../../utils/server'
 import './Options.css'
 import BigButton from '../common/BigButton'
 import DownloadHandler from '../../../utils/download'
-import * as meta from '../../../utils/metadata'
+import * as meta from '../../../utils/rsa'
 import HelpButton from '../common/HelpButton'
 import TextInput from '../common/TextInput'
+import SmallButton from '../common/SmallButton'
 
 interface IProps {
   closeFn: () => void
@@ -33,12 +34,14 @@ interface IState {
   themes: string[]
   theme: string
   encryption: boolean
-  patch_metadata: boolean
+  patch_rsa: boolean
   use_internal_proxy: boolean
   wipe_login: boolean
   horny_mode: boolean
+  auto_mongodb: boolean
   swag: boolean
   platform: string
+  un_elevated: boolean
 
   // Swag stuff
   akebi_path: string
@@ -61,12 +64,14 @@ export default class Options extends React.Component<IProps, IState> {
       themes: ['default'],
       theme: '',
       encryption: false,
-      patch_metadata: false,
+      patch_rsa: false,
       use_internal_proxy: false,
       wipe_login: false,
       horny_mode: false,
       swag: false,
+      auto_mongodb: false,
       platform: '',
+      un_elevated: false,
 
       // Swag stuff
       akebi_path: '',
@@ -82,7 +87,9 @@ export default class Options extends React.Component<IProps, IState> {
     this.toggleGrasscutterWithGame = this.toggleGrasscutterWithGame.bind(this)
     this.setCustomBackground = this.setCustomBackground.bind(this)
     this.toggleEncryption = this.toggleEncryption.bind(this)
-    this.restoreMetadata = this.restoreMetadata.bind(this)
+    this.removeRSA = this.removeRSA.bind(this)
+    this.addMigotoDelay = this.addMigotoDelay.bind(this)
+    this.toggleUnElevatedGame = this.toggleUnElevatedGame.bind(this)
   }
 
   async componentDidMount() {
@@ -104,16 +111,18 @@ export default class Options extends React.Component<IProps, IState> {
       grasscutter_with_game: config.grasscutter_with_game || false,
       language_options: languages,
       current_language: config.language || 'en',
-      bg_url_or_path: config.customBackground || '',
+      bg_url_or_path: config.custom_background || '',
       themes: (await getThemeList()).map((t) => t.name),
       theme: config.theme || 'default',
-      encryption: await translate(encEnabled ? 'options.enabled' : 'options.disabled'),
-      patch_metadata: config.patch_metadata || false,
+      encryption: encEnabled || false,
+      patch_rsa: config.patch_rsa || false,
       use_internal_proxy: config.use_internal_proxy || false,
       wipe_login: config.wipe_login || false,
       horny_mode: config.horny_mode || false,
       swag: config.swag_mode || false,
+      auto_mongodb: config.auto_mongodb || false,
       platform,
+      un_elevated: config.un_elevated || false,
 
       // Swag stuff
       akebi_path: config.akebi_path || '',
@@ -143,12 +152,24 @@ export default class Options extends React.Component<IProps, IState> {
     })
   }
 
-  setGrasscutterJar(value: string) {
+  async setGrasscutterJar(value: string) {
     setConfigOption('grasscutter_path', value)
 
     this.setState({
       grasscutter_path: value,
     })
+
+    const config = await getConfig()
+    const path = config.grasscutter_path.replace(/\\/g, '/')
+    const folderPath = path.substring(0, path.lastIndexOf('/'))
+    const encEnabled = await server.encryptionEnabled(folderPath + '/config.json')
+
+    // Update encryption button when setting new jar
+    this.setState({
+      encryption: encEnabled,
+    })
+
+    window.location.reload()
   }
 
   setJavaPath(value: string) {
@@ -176,7 +197,6 @@ export default class Options extends React.Component<IProps, IState> {
 
     // Set game exe in Migoto ini
     invoke('set_migoto_target', {
-      path: this.state.game_install_path,
       migotoPath: value,
     })
   }
@@ -211,13 +231,13 @@ export default class Options extends React.Component<IProps, IState> {
   async setCustomBackground(value: string) {
     const isUrl = /^(?:http(s)?:\/\/)/gm.test(value)
 
-    if (!value) return await setConfigOption('customBackground', '')
+    if (!value) return await setConfigOption('custom_background', '')
 
     if (!isUrl) {
       const filename = value.replace(/\\/g, '/').split('/').pop()
       const localBgPath = ((await dataDir()) as string).replace(/\\/g, '/')
 
-      await setConfigOption('customBackground', `${localBgPath}/cultivation/bg/${filename}`)
+      await setConfigOption('custom_background', `${localBgPath}/cultivation/bg/${filename}`)
 
       // Copy the file over to the local directory
       await invoke('copy_file', {
@@ -227,7 +247,7 @@ export default class Options extends React.Component<IProps, IState> {
 
       window.location.reload()
     } else {
-      await setConfigOption('customBackground', value)
+      await setConfigOption('custom_background', value)
       window.location.reload()
     }
   }
@@ -248,14 +268,33 @@ export default class Options extends React.Component<IProps, IState> {
     await server.toggleEncryption(folderPath + '/config.json')
 
     this.setState({
-      encryption: await translate(
-        (await server.encryptionEnabled(folderPath + '/config.json')) ? 'options.enabled' : 'options.disabled'
-      ),
+      encryption: await server.encryptionEnabled(folderPath + '/config.json'),
+    })
+
+    // Check if Grasscutter is running, and restart if so to apply changes
+    if (await invoke('is_grasscutter_running')) {
+      alert('Automatically restarting Grasscutter to apply encryption changes!')
+      await invoke('restart_grasscutter')
+    }
+  }
+
+  async toggleUnElevatedGame() {
+    const changedVal = !(await getConfigOption('un_elevated'))
+    setConfigOption('un_elevated', changedVal)
+
+    this.setState({
+      un_elevated: changedVal,
     })
   }
 
-  async restoreMetadata() {
-    await meta.restoreMetadata(this.props.downloadManager)
+  async removeRSA() {
+    await meta.unpatchGame()
+  }
+
+  async addMigotoDelay() {
+    invoke('set_migoto_delay', {
+      migotoPath: this.state.migoto_path,
+    })
   }
 
   async installCert() {
@@ -299,26 +338,22 @@ export default class Options extends React.Component<IProps, IState> {
         )}
         <div className="OptionSection" id="menuOptionsContainermetaDownload">
           <div className="OptionLabel" id="menuOptionsLabelmetaDownload">
-            <Tr text="options.recover_metadata" />
-            <HelpButton contents="help.emergency_metadata" />
+            <Tr text="options.recover_rsa" />
+            <HelpButton contents="help.emergency_rsa" />
           </div>
           <div className="OptionValue" id="menuOptionsButtonmetaDownload">
-            <BigButton onClick={this.restoreMetadata} id="metaDownload">
-              <Tr text="components.download" />
+            <BigButton onClick={this.removeRSA} id="metaDownload">
+              <Tr text="components.delete" />
             </BigButton>
           </div>
         </div>
         <div className="OptionSection" id="menuOptionsContainerPatchMeta">
           <div className="OptionLabel" id="menuOptionsLabelPatchMeta">
-            <Tr text="options.patch_metadata" />
-            <HelpButton contents="help.patch_metadata" />
+            <Tr text="options.patch_rsa" />
+            <HelpButton contents="help.patch_rsa" />
           </div>
           <div className="OptionValue" id="menuOptionsCheckboxPatchMeta">
-            <Checkbox
-              onChange={() => this.toggleOption('patch_metadata')}
-              checked={this.state?.patch_metadata}
-              id="patchMeta"
-            />
+            <Checkbox onChange={() => this.toggleOption('patch_rsa')} checked={this.state?.patch_rsa} id="patchMeta" />
           </div>
         </div>
         <div className="OptionSection" id="menuOptionsContainerUseProxy">
@@ -346,6 +381,18 @@ export default class Options extends React.Component<IProps, IState> {
             />
           </div>
         </div>
+        <div className="OptionSection" id="menuOptionsContainerAutoMongodb">
+          <div className="OptionLabel" id="menuOptionsLabelAutoMongodb">
+            <Tr text="options.auto_mongodb" />
+          </div>
+          <div className="OptionValue" id="menuOptionsCheckboxAutoMongodb">
+            <Checkbox
+              onChange={() => this.toggleOption('auto_mongodb')}
+              checked={this.state?.auto_mongodb}
+              id="autoMongodb"
+            />
+          </div>
+        </div>
 
         <Divider />
 
@@ -363,9 +410,7 @@ export default class Options extends React.Component<IProps, IState> {
             <HelpButton contents="help.encryption" />
           </div>
           <div className="OptionValue" id="menuOptionsButtonToggleEnc">
-            <BigButton onClick={this.toggleEncryption} id="toggleEnc">
-              {this.state.encryption}
-            </BigButton>
+            <Checkbox onChange={() => this.toggleEncryption()} checked={this.state.encryption} id="toggleEnc" />
           </div>
         </div>
         <div className="OptionSection" id="menuOptionsContainerInstallCert">
@@ -394,6 +439,7 @@ export default class Options extends React.Component<IProps, IState> {
                 <Tr text="swag.migoto" />
               </div>
               <div className="OptionValue" id="menuOptionsDirMigoto">
+                <SmallButton onClick={this.addMigotoDelay} id="migotoDelay" contents="help.add_delay"></SmallButton>
                 <DirInput onChange={this.setMigoto} value={this.state?.migoto_path} extensions={['exe']} />
               </div>
             </div>
@@ -419,6 +465,18 @@ export default class Options extends React.Component<IProps, IState> {
               onChange={() => this.toggleOption('grasscutter_with_game')}
               checked={this.state?.grasscutter_with_game}
               id="gcWithGame"
+            />
+          </div>
+        </div>
+        <div className="OptionSection" id="menuOptionsContainerUEGame">
+          <div className="OptionLabel" id="menuOptionsLabelUEGame">
+            <Tr text="options.un_elevated" />
+          </div>
+          <div className="OptionValue" id="menuOptionsCheckboxUEGame">
+            <Checkbox
+              onChange={() => this.toggleOption('un_elevated')}
+              checked={this.state?.un_elevated}
+              id="unElevatedGame"
             />
           </div>
         </div>
@@ -483,7 +541,7 @@ export default class Options extends React.Component<IProps, IState> {
               readonly={false}
               clearable={true}
               customClearBehaviour={async () => {
-                await setConfigOption('customBackground', '')
+                await setConfigOption('custom_background', '')
                 window.location.reload()
               }}
             />

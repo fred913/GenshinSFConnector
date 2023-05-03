@@ -1,14 +1,25 @@
 use duct::cmd;
 use ini::Ini;
+use std::ffi::OsStr;
 use std::path::PathBuf;
 
 #[cfg(windows)]
-use registry::{Data, Hive, Security};
+use {
+  registry::{Data, Hive, Security},
+  windows_service::service::{ServiceAccess, ServiceState::Stopped},
+  windows_service::service_manager::{ServiceManager, ServiceManagerAccess},
+};
 
 #[tauri::command]
 pub fn run_program(path: String, args: Option<String>) {
   // Without unwrap_or, this can crash when UAC prompt is denied
-  open::that(format!("{} {}", &path, &args.unwrap_or_else(|| "".into()))).unwrap_or(());
+  match open::with(
+    format!("{} {}", path, args.unwrap_or_else(|| "".into())),
+    path.clone(),
+  ) {
+    Ok(_) => (),
+    Err(e) => println!("Failed to open program ({}): {}", &path, e),
+  };
 }
 
 #[tauri::command]
@@ -27,7 +38,7 @@ pub fn run_program_relative(path: String, args: Option<String>) {
   open::that(format!("{} {}", &path, args.unwrap_or_else(|| "".into()))).unwrap_or(());
 
   // Restore the original working directory
-  std::env::set_current_dir(&cwd).unwrap();
+  std::env::set_current_dir(cwd).unwrap();
 }
 
 #[tauri::command]
@@ -52,7 +63,7 @@ pub fn run_command(program: &str, args: Vec<&str>, relative: Option<bool>) {
     cmd(prog, args).run().unwrap();
 
     // Restore the original working directory
-    std::env::set_current_dir(&cwd).unwrap();
+    std::env::set_current_dir(cwd).unwrap();
   });
 }
 
@@ -64,6 +75,8 @@ pub fn run_jar(path: String, execute_in: String, java_path: String) {
     format!("\"{}\" -jar \"{}\"", java_path, path)
   };
 
+  println!("Launching .jar with command: {}", &command);
+
   // Open the program from the specified path.
   match open::with(
     format!("/k cd /D \"{}\" & {}", &execute_in, &command),
@@ -71,6 +84,22 @@ pub fn run_jar(path: String, execute_in: String, java_path: String) {
   ) {
     Ok(_) => (),
     Err(e) => println!("Failed to open jar ({} from {}): {}", &path, &execute_in, e),
+  };
+}
+
+#[tauri::command]
+pub fn run_un_elevated(path: String, args: Option<String>) {
+  // Open the program non-elevated.
+  match open::with(
+    format!(
+      "cmd /min /C \"set __COMPAT_LAYER=RUNASINVOKER && start \"\" \"{}\"\" {}",
+      path,
+      args.unwrap_or_else(|| "".into())
+    ),
+    "C:\\Windows\\System32\\cmd.exe",
+  ) {
+    Ok(_) => (),
+    Err(e) => println!("Failed to open program ({}): {}", &path, e),
   };
 }
 
@@ -94,8 +123,45 @@ pub fn install_location() -> String {
 }
 
 #[tauri::command]
-pub fn set_migoto_target(path: String, migoto_path: String) -> bool {
-  let pathbuf = PathBuf::from(path);
+pub fn set_migoto_target(window: tauri::Window, migoto_path: String) -> bool {
+  let mut migoto_pathbuf = PathBuf::from(migoto_path);
+
+  migoto_pathbuf.pop();
+  migoto_pathbuf.push("d3dx.ini");
+
+  let mut conf = match Ini::load_from_file(&migoto_pathbuf) {
+    Ok(c) => {
+      println!("Loaded migoto ini");
+      c
+    }
+    Err(e) => {
+      println!("Error loading migoto config: {}", e);
+      return false;
+    }
+  };
+
+  window.emit("migoto_set", &()).unwrap();
+
+  // Set options
+  conf
+    .with_section(Some("Loader"))
+    .set("target", "GenshinImpact.exe");
+
+  // Write file
+  match conf.write_to_file(&migoto_pathbuf) {
+    Ok(_) => {
+      println!("Wrote config!");
+      true
+    }
+    Err(e) => {
+      println!("Error writing config: {}", e);
+      false
+    }
+  }
+}
+
+#[tauri::command]
+pub fn set_migoto_delay(migoto_path: String) -> bool {
   let mut migoto_pathbuf = PathBuf::from(migoto_path);
 
   migoto_pathbuf.pop();
@@ -113,18 +179,16 @@ pub fn set_migoto_target(path: String, migoto_path: String) -> bool {
   };
 
   // Set options
-  conf
-    .with_section(Some("Loader"))
-    .set("target", "GenshinImpact.exe");
+  conf.with_section(Some("Loader")).set("delay", "20");
 
   // Write file
   match conf.write_to_file(&migoto_pathbuf) {
     Ok(_) => {
-      println!("Wrote config!");
+      println!("Wrote delay!");
       true
     }
     Err(e) => {
-      println!("Error writing config: {}", e);
+      println!("Error writing delay: {}", e);
       false
     }
   }
@@ -152,6 +216,86 @@ pub fn wipe_registry(exec_name: String) {
     Err(e) => println!("Error wiping registry: {}", e),
   }
 }
+
+#[cfg(windows)]
+#[tauri::command]
+pub fn service_status(service: String) -> bool {
+  let manager = match ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT) {
+    Ok(manager) => manager,
+    Err(_e) => return false,
+  };
+  let my_service = match manager.open_service(service.clone(), ServiceAccess::QUERY_STATUS) {
+    Ok(my_service) => my_service,
+    Err(_e) => {
+      println!("{} service not found! Not installed?", service);
+      return false;
+    }
+  };
+  let status_result = my_service.query_status();
+  if let Ok(..) = status_result {
+    let status = status_result.unwrap();
+    println!("{} service status: {:?}", service, status.current_state);
+    if status.current_state == Stopped {
+      // Start the service if it is stopped
+      start_service(service);
+    }
+    true
+  } else {
+    false
+  }
+}
+
+#[cfg(unix)]
+#[tauri::command]
+pub fn service_status(_service: String) {}
+
+#[cfg(windows)]
+#[tauri::command]
+pub fn start_service(service: String) -> bool {
+  println!("Starting service: {}", service);
+  let manager = match ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT) {
+    Ok(manager) => manager,
+    Err(_e) => return false,
+  };
+  let my_service = match manager.open_service(service, ServiceAccess::START) {
+    Ok(my_service) => my_service,
+    Err(_e) => return false,
+  };
+  match my_service.start(&[OsStr::new("Started service!")]) {
+    Ok(_s) => true,
+    Err(_e) => return false,
+  };
+  true
+}
+
+#[cfg(unix)]
+#[tauri::command]
+pub fn start_service(_service: String) {
+  let _started = OsStr::new("Started service!");
+}
+
+#[cfg(windows)]
+#[tauri::command]
+pub fn stop_service(service: String) -> bool {
+  println!("Stopping service: {}", service);
+  let manager = match ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT) {
+    Ok(manager) => manager,
+    Err(_e) => return false,
+  };
+  let my_service = match manager.open_service(service, ServiceAccess::STOP) {
+    Ok(my_service) => my_service,
+    Err(_e) => return false,
+  };
+  match my_service.stop() {
+    Ok(_s) => true,
+    Err(_e) => return false,
+  };
+  true
+}
+
+#[cfg(unix)]
+#[tauri::command]
+pub fn stop_service(_service: String) {}
 
 #[cfg(unix)]
 #[tauri::command]

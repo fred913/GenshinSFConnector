@@ -117,29 +117,42 @@ interface ModDownload {
   containsExe: boolean
 }
 
-export async function getMods(mode: string) {
+export async function getMods(mode: string, page: number, search: string) {
   let modList: GamebananaResponse[] = []
-  let hadMods = true
-  let page = 1
 
-  while (hadMods) {
-    const resp = JSON.parse(
-      await invoke('list_submissions', {
-        mode,
-        page: '' + page,
-      })
-    )
+  if (search.length > 0) {
+    let hadMods = true
+    let page = 1
 
-    if (resp.length === 0) hadMods = false
+    while (hadMods) {
+      const resp = JSON.parse(
+        await invoke('list_submissions', {
+          mode,
+          page: '' + page,
+          search: search,
+        })
+      )
 
-    modList = [...modList, ...resp]
-    page++
+      const total = resp._aMetadata._nRecordCount
 
-    console.log(page)
-    console.log(resp)
+      if (page > total / 15) hadMods = false
+
+      modList = [...modList, ...resp._aRecords]
+      page++
+    }
+
+    return formatGamebananaData(modList)
   }
 
-  console.log(modList)
+  const resp = JSON.parse(
+    await invoke('list_submissions', {
+      mode,
+      page: '' + page,
+      search: '',
+    })
+  )
+
+  modList = [...modList, ...resp]
 
   return formatGamebananaData(modList)
 }

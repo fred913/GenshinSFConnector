@@ -50,6 +50,7 @@ export default class NewsSection extends React.Component<IProps, IState> {
   componentDidMount() {
     // Call showNews off the bat
     this.showNews()
+    this.setSelected('commits')
   }
 
   setSelected(item: string) {
@@ -59,50 +60,51 @@ export default class NewsSection extends React.Component<IProps, IState> {
   }
 
   async showLatestCommits() {
-    if (!this.state.commitList) {
-      const response: string = await invoke('req_get', { url: 'https://api.grasscutter.io/cultivation/query' })
-      let grasscutterApiResponse: GrasscutterAPIResponse | null = null
+    // Just use official API
+    const response: string = await invoke('req_get', {
+      url: 'https://api.github.com/repos/Grasscutters/Grasscutter/commits',
+    })
+    let grasscutterApiResponse: GrasscutterAPIResponse | null = null
 
-      try {
-        grasscutterApiResponse = JSON.parse(response)
-      } catch (e) {
-        grasscutterApiResponse = null
-      }
-
-      let commits: CommitResponse[]
-      if (grasscutterApiResponse?.commits == null) {
-        // If it didn't work, use official API
-        const response: string = await invoke('req_get', {
-          url: 'https://api.github.com/repos/Grasscutters/Grasscutter/commits',
-        })
-        commits = JSON.parse(response)
-      } else {
-        commits = grasscutterApiResponse.commits.gc_stable
-      }
-
-      // Probably rate-limited
-      if (!Array.isArray(commits)) return
-
-      // Get only first 5
-      const commitsList = commits.slice(0, 10)
-      const commitsListHtml = commitsList.map((commitResponse: CommitResponse) => {
-        return (
-          <tr className="Commit" id="newsCommitsTable" key={commitResponse.sha}>
-            <td className="CommitAuthor">
-              <span>{commitResponse.commit.author.name}</span>
-            </td>
-            <td className="CommitMessage">
-              <span>{commitResponse.commit.message}</span>
-            </td>
-          </tr>
-        )
-      })
-
-      this.setState({
-        commitList: commitsListHtml,
-        news: <>{commitsListHtml}</>,
-      })
+    try {
+      grasscutterApiResponse = JSON.parse(response)
+    } catch (e) {
+      grasscutterApiResponse = null
     }
+
+    let commits: CommitResponse[]
+    if (grasscutterApiResponse?.commits == null) {
+      // If it didn't work, try again anyways
+      const response: string = await invoke('req_get', {
+        url: 'https://api.github.com/repos/Grasscutters/Grasscutter/commits',
+      })
+      commits = JSON.parse(response)
+    } else {
+      commits = grasscutterApiResponse.commits.gc_stable
+    }
+
+    // Probably rate-limited
+    if (!Array.isArray(commits)) return
+
+    // Get only first 5
+    const commitsList = commits.slice(0, 10)
+    const commitsListHtml = commitsList.map((commitResponse: CommitResponse) => {
+      return (
+        <tr className="Commit" id="newsCommitsTable" key={commitResponse.sha}>
+          <td className="CommitAuthor">
+            <span>{commitResponse.commit.author.name}</span>
+          </td>
+          <td className="CommitMessage">
+            <span>{commitResponse.commit.message}</span>
+          </td>
+        </tr>
+      )
+    })
+
+    this.setState({
+      commitList: commitsListHtml,
+      news: <>{commitsListHtml}</>,
+    })
 
     return this.state.commitList
   }
@@ -122,7 +124,7 @@ export default class NewsSection extends React.Component<IProps, IState> {
       case 'latest_version':
         news = (
           <tr>
-            <td>Latest version</td>
+            <td>Latest version: Grasscutter 1.4.8 - Cultivation 1.0.27</td>
           </tr>
         )
         break
